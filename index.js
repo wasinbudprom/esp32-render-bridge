@@ -1,36 +1,34 @@
+// index.js (Render Server)
 const express = require("express");
 const admin = require("firebase-admin");
 const app = express();
 
-app.use(express.json({ limit: "10mb" })); // รองรับ Base64 จาก ESP32
+// ตั้งค่าให้รับ Body แบบ Binary (Raw data)
+app.use(express.raw({ type: "image/jpeg", limit: "10mb" }));
 
-// ดึงค่ากุญแจจาก Environment Variable ที่เราตั้งใน Render
 const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
-
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://hydroponic-ddc5e-default-rtdb.asia-southeast1.firebasedatabase.app/", // ใส่ URL ของคุณ
+  databaseURL:
+    "https://hydroponic-ddc5e-default-rtdb.asia-southeast1.firebasedatabase.app/",
 });
-
 const db = admin.database();
 
-app.post(
-  "/upload",
-  express.raw({ type: "image/jpeg", limit: "5mb" }),
-  (req, res) => {
-    const fs = require("fs");
-    const path = require("path");
+app.post("/upload", async (req, res) => {
+  try {
+    // แปลง Binary ที่ได้จาก ESP32 เป็น Base64 string
+    const base64Image = req.body.toString("base64");
+    const fullDataUri = `data:image/jpeg;base64,${base64Image}`;
 
-    const filename = Date.now() + ".jpg";
-    const filepath = path.join(__dirname, "uploads", filename);
+    // ส่งเข้า Firebase พาธที่ React รออ่านอยู่
+    await db.ref("device/esp32_01/camera/lastImage").set(fullDataUri);
 
-    fs.writeFileSync(filepath, req.body);
+    console.log("Image updated successfully");
+    res.status(200).send("Success");
+  } catch (error) {
+    console.error(error);
+    res.status(500).send(error.message);
+  }
+});
 
-    const imageUrl = `${req.protocol}://${req.get("host")}/images/${filename}`;
-
-    res.json({ url: imageUrl });
-  },
-);
-
-
-app.listen(3000, () => console.log("Server running on Render"));
+app.listen(process.env.PORT || 3000);

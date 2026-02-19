@@ -14,16 +14,23 @@ admin.initializeApp({
 
 const db = admin.database();
 
-app.post("/upload", async (req, res) => {
-  const { image } = req.body; // รับรูปที่เป็น Base64 string
+app.post(
+  "/upload",
+  express.raw({ type: "image/jpeg", limit: "5mb" }),
+  (req, res) => {
+    const fs = require("fs");
+    const path = require("path");
 
-  try {
-    // ส่งเข้า Firebase ตรงๆ ไม่ต้องเซฟลงเครื่อง Render
-    await db.ref("/device/esp32_01/camera/lastImage").set(`data:image/jpeg;base64,${image}`);
-    res.json({ status: "success" });
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
-});
+    const filename = Date.now() + ".jpg";
+    const filepath = path.join(__dirname, "uploads", filename);
+
+    fs.writeFileSync(filepath, req.body);
+
+    const imageUrl = `${req.protocol}://${req.get("host")}/images/${filename}`;
+
+    res.json({ url: imageUrl });
+  },
+);
+
 
 app.listen(3000, () => console.log("Server running on Render"));

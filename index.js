@@ -1,22 +1,29 @@
-// server.js
 const express = require("express");
-const multer = require("multer");
+const admin = require("firebase-admin");
 const app = express();
 
-const storage = multer.diskStorage({
-  destination: "uploads/",
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + ".jpg");
-  },
+app.use(express.json({ limit: "10mb" })); // รองรับ Base64 จาก ESP32
+
+// ดึงค่ากุญแจจาก Environment Variable ที่เราตั้งใน Render
+const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+  databaseURL: "https://hydroponic-ddc5e-default-rtdb.asia-southeast1.firebasedatabase.app/", // ใส่ URL ของคุณ
 });
 
-const upload = multer({ storage });
+const db = admin.database();
 
-app.use("/images", express.static("uploads"));
+app.post("/upload", async (req, res) => {
+  const { image } = req.body; // รับรูปที่เป็น Base64 string
 
-app.post("/upload", upload.single("image"), (req, res) => {
-  const imageUrl = `${req.protocol}://${req.get("host")}/images/${req.file.filename}`;
-  res.json({ url: imageUrl });
+  try {
+    // ส่งเข้า Firebase ตรงๆ ไม่ต้องเซฟลงเครื่อง Render
+    await db.ref("/device/esp32_01/camera/lastImage").set(`data:image/jpeg;base64,${image}`);
+    res.json({ status: "success" });
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
 });
 
-app.listen(3000, () => console.log("Server running"));
+app.listen(3000, () => console.log("Server running on Render"));
